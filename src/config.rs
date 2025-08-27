@@ -3,6 +3,12 @@ use egui::{Color32, text::LayoutJob};
 #[derive(Debug)]
 pub struct Config {
     pub font_size: f32,
+    pub subscript_font_size: f32,
+    pub superscript_font_size: f32,
+
+    pub max_lines: usize,
+
+    pub expand_bg: f32,
 
     pub strike_through_width: f32,
     pub underline_width: f32,
@@ -37,10 +43,15 @@ const fn color(raw: u32) -> Color32 {
 impl Config {
     pub const DARK: Self = Self {
         font_size: 14.0,
+        subscript_font_size: 10.0,
+        superscript_font_size: 10.0,
+
+        max_lines: 1000,
+        expand_bg: 0.0,
 
         strike_through_width: 1.0,
-        underline_width: 4.0,
-        double_underline_width: 6.0,
+        underline_width: 2.0,
+        double_underline_width: 4.0,
 
         fg_default: Color32::from_gray(0xcc),
         bg_default: Color32::from_gray(0x18),

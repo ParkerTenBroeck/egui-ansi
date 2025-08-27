@@ -17,14 +17,32 @@ enum Weight {
 }
 
 #[derive(Debug)]
+enum Blinking {
+    None,
+    Slow,
+    Fast,
+}
+
+#[derive(Debug)]
+enum Script {
+    None,
+    Super,
+    Sub,
+}
+
+#[derive(Debug)]
 pub struct State {
     layout: LayoutJob,
+
+    lines: usize,
 
     fg: Color,
     bg: Color,
     proportional: bool,
     italic: bool,
     weight: Weight,
+    script: Script,
+    blinking: Blinking,
     underline: Underline,
     underline_color: Option<Color>,
     invert_fg_bg: bool,
@@ -36,11 +54,16 @@ impl State {
     pub fn new(cfg: &Config) -> Self {
         Self {
             layout: cfg.default_layout(),
+
+            lines: 0,
+
             fg: Color::Default,
             bg: Color::Default,
             proportional: false,
             italic: false,
             weight: Weight::Normal,
+            script: Script::None,
+            blinking: Blinking::None,
             underline: Underline::None,
             underline_color: None,
             invert_fg_bg: false,
@@ -63,15 +86,15 @@ impl State {
         match csi {
             ansi::KnownCSI::CursorRight(count) => {
                 for _ in 0..count {
-                    self.append_char(' ', cfg)
+                    self.append_char(' ', cfg);
                 }
             }
             ansi::KnownCSI::CursorNextLine(count) => {
                 for _ in 0..count {
-                    self.append_char('\n', cfg)
+                    self.append_char('\n', cfg);
                 }
             }
-            ansi::KnownCSI::EraseDisplay => self.layout = cfg.default_layout(),
+            ansi::KnownCSI::EraseDisplay => self.clear(cfg),
             ansi::KnownCSI::SelectGraphicRendition(gr) => {
                 for sg in gr {
                     self.sg(sg);
@@ -83,7 +106,7 @@ impl State {
 
     fn sg(&mut self, sg: SelectGraphic) {
         match sg {
-            ansi::SelectGraphic::Reset => {
+            SelectGraphic::Reset => {
                 self.fg = Color::Default;
                 self.bg = Color::Default;
                 self.proportional = false;
@@ -94,34 +117,37 @@ impl State {
                 self.invert_fg_bg = false;
                 self.strike_through = false;
                 self.conceal = false;
+                self.blinking = Blinking::None;
+                self.script = Script::None;
             }
-
-            ansi::SelectGraphic::Bold => self.weight = Weight::Bold,
-            ansi::SelectGraphic::Faint => self.weight = Weight::Faint,
-            ansi::SelectGraphic::NormalIntensity => self.weight = Weight::Normal,
-
-            ansi::SelectGraphic::Italic => self.italic = true,
-            ansi::SelectGraphic::Underline => self.underline = Underline::Single,
-            ansi::SelectGraphic::SlowBlink => {}
-            ansi::SelectGraphic::RapidBlink => {}
-            ansi::SelectGraphic::InvertFgBg => self.invert_fg_bg = true,
-            ansi::SelectGraphic::Conceal => self.conceal = true,
-            ansi::SelectGraphic::CrossedOut => self.strike_through = true,
-            ansi::SelectGraphic::PrimaryFont => {}
-            ansi::SelectGraphic::AlternativeFont(_) => {}
-            ansi::SelectGraphic::Fraktur => {}
-            ansi::SelectGraphic::DoublyUnderlined => self.underline = Underline::Double,
-            ansi::SelectGraphic::NeitherItalicNorBackletter => self.italic = false,
-            ansi::SelectGraphic::NotUnderlined => self.underline = Underline::None,
-            ansi::SelectGraphic::NotBlinking => {}
-            ansi::SelectGraphic::ProportionalSpacing => self.proportional = true,
-            ansi::SelectGraphic::NotInvertedFgBg => self.invert_fg_bg = false,
-            ansi::SelectGraphic::Reveal => self.conceal = false,
-            ansi::SelectGraphic::NotCrossedOut => self.strike_through = false,
-            ansi::SelectGraphic::Fg(color) => self.fg = color,
-            ansi::SelectGraphic::Bg(color) => self.bg = color,
-            ansi::SelectGraphic::DisableProportionalSpacing => self.proportional = false,
-            ansi::SelectGraphic::UnderlineColor(color) => {
+            SelectGraphic::Bold => self.weight = Weight::Bold,
+            SelectGraphic::Faint => self.weight = Weight::Faint,
+            SelectGraphic::NormalIntensity => self.weight = Weight::Normal,
+            SelectGraphic::Italic => self.italic = true,
+            SelectGraphic::Underline => self.underline = Underline::Single,
+            SelectGraphic::SlowBlink => self.blinking = Blinking::Slow,
+            SelectGraphic::RapidBlink => self.blinking = Blinking::Fast,
+            SelectGraphic::NotBlinking => self.blinking = Blinking::None,
+            SelectGraphic::InvertFgBg => self.invert_fg_bg = true,
+            SelectGraphic::Conceal => self.conceal = true,
+            SelectGraphic::CrossedOut => self.strike_through = true,
+            SelectGraphic::Superscript => self.script = Script::Super,
+            SelectGraphic::Subscript => self.script = Script::Sub,
+            SelectGraphic::NeitherSuperscriptNorSubScript => self.script = Script::None,
+            SelectGraphic::PrimaryFont => {}
+            SelectGraphic::AlternativeFont(_) => {}
+            SelectGraphic::Fraktur => {}
+            SelectGraphic::DoublyUnderlined => self.underline = Underline::Double,
+            SelectGraphic::NeitherItalicNorBackletter => self.italic = false,
+            SelectGraphic::NotUnderlined => self.underline = Underline::None,
+            SelectGraphic::ProportionalSpacing => self.proportional = true,
+            SelectGraphic::NotInvertedFgBg => self.invert_fg_bg = false,
+            SelectGraphic::Reveal => self.conceal = false,
+            SelectGraphic::NotCrossedOut => self.strike_through = false,
+            SelectGraphic::Fg(color) => self.fg = color,
+            SelectGraphic::Bg(color) => self.bg = color,
+            SelectGraphic::DisableProportionalSpacing => self.proportional = false,
+            SelectGraphic::UnderlineColor(color) => {
                 self.underline_color = Some(color);
             }
             _ => {}
@@ -167,7 +193,11 @@ impl State {
         }
 
         match self.weight {
-            Weight::Faint => match if self.invert_fg_bg { self.bg.flatten_vga() } else { self.fg.flatten_vga() } {
+            Weight::Faint => match if self.invert_fg_bg {
+                self.bg.flatten_vga()
+            } else {
+                self.fg.flatten_vga()
+            } {
                 Color::BrightBlack => color = cfg.black,
                 Color::BrightRed => color = cfg.red,
                 Color::BrightGreen => color = cfg.green,
@@ -179,7 +209,11 @@ impl State {
                 _ => color = color.gamma_multiply(0.5),
             },
             Weight::Normal => {}
-            Weight::Bold => match if self.invert_fg_bg { self.bg.flatten_vga() } else { self.fg.flatten_vga() } {
+            Weight::Bold => match if self.invert_fg_bg {
+                self.bg.flatten_vga()
+            } else {
+                self.fg.flatten_vga()
+            } {
                 Color::Black => color = cfg.bright_black,
                 Color::Red => color = cfg.bright_red,
                 Color::Green => color = cfg.bright_green,
@@ -198,13 +232,18 @@ impl State {
 
         let underline = self
             .underline_color
-            .map(|c| Self::color_convert(c, false, cfg))
-            .unwrap_or(color);
+            .map_or(color, |c| Self::color_convert(c, false, cfg));
+
+        let font_size = match self.script {
+            Script::None => cfg.font_size,
+            Script::Super => cfg.superscript_font_size,
+            Script::Sub => cfg.subscript_font_size,
+        };
         let format = TextFormat {
             font_id: if self.proportional {
-                FontId::proportional(cfg.font_size)
+                FontId::proportional(font_size)
             } else {
-                FontId::monospace(cfg.font_size)
+                FontId::monospace(font_size)
             },
             color,
             background,
@@ -219,8 +258,18 @@ impl State {
             } else {
                 Stroke::NONE
             },
-
-            ..Default::default()
+            expand_bg: cfg.expand_bg,
+            extra_letter_spacing: if !self.proportional {
+                (cfg.font_size - font_size)/2.0
+            } else {
+                0.0
+            },
+            valign: match self.script {
+                Script::None => egui::Align::Center,
+                Script::Super => egui::Align::Min,
+                Script::Sub => egui::Align::Max,
+            },
+            line_height: None
         };
         if let Some(last) = self.layout.sections.last_mut()
             && last.format == format
@@ -231,9 +280,43 @@ impl State {
             self.layout
                 .append(c.encode_utf8(&mut [0u8; 4]), 0.0, format);
         }
+        if c == '\n' {
+            self.lines += 1;
+            if self.lines > cfg.max_lines {}
+        }
+        while self.lines > cfg.max_lines {
+            self.delete_line();
+        }
+    }
+
+    fn delete_line(&mut self) {
+        if let Some(at) = self.layout.text.find('\n') {
+            let new = self.layout.text.split_off(at + 1);
+            let cutoff = self.layout.text.len();
+            self.layout.text = new;
+            self.layout.sections.retain_mut(|section| {
+                if section.byte_range.end <= cutoff {
+                    false
+                } else {
+                    section.byte_range.start = section.byte_range.start.saturating_sub(cutoff);
+                    section.byte_range.end = section.byte_range.end.saturating_sub(cutoff);
+                    true
+                }
+            });
+            self.lines -= 1;
+        } else {
+            self.layout.text.clear();
+            self.layout.sections.clear();
+            self.lines = 0;
+        }
     }
 
     pub(crate) fn layout(&self) -> LayoutJob {
         self.layout.clone()
+    }
+
+    pub fn clear(&mut self, cfg: &Config) {
+        self.layout = cfg.default_layout();
+        self.lines = 0;
     }
 }

@@ -2,13 +2,15 @@ use eframe::egui;
 use egui_ansi::Terminal;
 
 struct MyApp {
-    term: Terminal,
+    term: Box<Terminal>,
 }
 
 impl Default for MyApp {
     fn default() -> Self {
+        let mut term = Terminal::new_box::<256>(egui_ansi::Config::DARK);
+        _ = print_table(&mut &mut *term);
         Self {
-            term: Terminal::new(egui_ansi::Config::DARK),
+            term,
         }
     }
 }
@@ -20,10 +22,10 @@ impl eframe::App for MyApp {
 
             ui.horizontal(|ui| {
                 if ui.button("print").clicked() {
-                    _ = print_table(&mut self.term);
+                    _ = print_table(&mut &mut *self.term);
                 }
             });
-            self.term.show(ui);
+            self.term.show_bordered(ui);
         });
     }
 }
@@ -135,13 +137,8 @@ fn attributes() -> Vec<(&'static str, &'static str)> {
         ("8", "Conceal / Hidden"),
         ("9", "Crossed-out / Strikethrough"),
         ("21", "Double underline (rare)"),
-        ("22", "Normal intensity (not bold/faint)"),
-        ("23", "Not italic"),
-        ("24", "Not underlined"),
-        ("25", "Not blinking"),
-        ("27", "Not reversed"),
-        ("28", "Reveal (not concealed)"),
-        ("29", "Not crossed-out"),
+        ("73", "Super script"),
+        ("74", "Sub script"),
     ]
 }
 const COLOR_FG: &[(&str, &str)] = &[

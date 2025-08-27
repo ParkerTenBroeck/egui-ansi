@@ -1,21 +1,72 @@
+use std::{
+    ops::{Deref, DerefMut},
+    rc::Rc,
+    sync::Arc,
+};
+
 use ansi::AnsiParser;
 use egui::text::LayoutJob;
 
 use crate::{Config, state::State};
 
 #[derive(Debug)]
-pub struct Terminal {
+pub struct GenericTerminal<T: ?Sized> {
     state: State,
-    cfg: Config,
-    ansi: ansi::SizedAnsiParser<256>,
+    pub cfg: Config,
+    pub ansi: ansi::AnsiParser<T>,
 }
 
-impl Terminal {
-    pub fn new(cfg: Config) -> Self {
-        Self {
-            ansi: AnsiParser::new(),
+pub type Terminal = GenericTerminal<[u8]>;
+pub type StaticTerminal<const B: usize> = GenericTerminal<[u8; B]>;
+
+impl<const C: usize> Deref for GenericTerminal<[u8; C]> {
+    type Target = GenericTerminal<[u8]>;
+
+    fn deref(&self) -> &Self::Target {
+        self
+    }
+}
+
+impl<const C: usize> DerefMut for GenericTerminal<[u8; C]> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self
+    }
+}
+
+impl GenericTerminal<[u8]> {
+    #[must_use]
+    pub fn new_box<const C: usize>(cfg: Config) -> Box<Self> {
+        Box::new(GenericTerminal {
             state: State::new(&cfg),
             cfg,
+            ansi: AnsiParser::<[u8; C]>::new(),
+        })
+    }
+
+    #[must_use]
+    pub fn new_rc<const C: usize>(cfg: Config) -> Rc<Self> {
+        Rc::new(GenericTerminal {
+            state: State::new(&cfg),
+            cfg,
+            ansi: AnsiParser::<[u8; C]>::new(),
+        })
+    }
+
+    #[must_use]
+    pub fn new_arc<const C: usize>(cfg: Config) -> Arc<Self> {
+        Arc::new(GenericTerminal {
+            state: State::new(&cfg),
+            cfg,
+            ansi: AnsiParser::<[u8; C]>::new(),
+        })
+    }
+
+    #[must_use]
+    pub fn new_static<const C: usize>(cfg: Config) -> StaticTerminal<C> {
+        GenericTerminal {
+            state: State::new(&cfg),
+            cfg,
+            ansi: AnsiParser::<[u8; C]>::new(),
         }
     }
 
@@ -25,7 +76,7 @@ impl Terminal {
         }
     }
 
-    pub fn show(&self, ui: &mut egui::Ui) {
+    pub fn show_bordered(&self, ui: &mut egui::Ui) {
         egui::Frame::new()
             .inner_margin(2)
             .corner_radius(ui.style().visuals.widgets.noninteractive.corner_radius)
@@ -35,16 +86,39 @@ impl Terminal {
                 egui::ScrollArea::both()
                     .stick_to_bottom(true)
                     .stick_to_right(true)
-                    .show(ui, |ui| ui.label(self.layout()));
+                    .show(ui, |ui| {
+                        ui.label(self.layout());
+                        ui.allocate_space(ui.available_size());
+                    });
             });
     }
 
+    pub fn show_framed(&self, ui: &mut egui::Ui) {
+        egui::Frame::new()
+            .inner_margin(2)
+            .fill(self.cfg.bg_default)
+            .show(ui, |ui| {
+                egui::ScrollArea::both()
+                    .stick_to_bottom(true)
+                    .stick_to_right(true)
+                    .show(ui, |ui| {
+                        ui.label(self.layout());
+                        ui.allocate_space(ui.available_size());
+                    });
+            });
+    }
+
+    pub fn clear(&mut self) {
+        self.state.clear(&self.cfg);
+    }
+
+    #[must_use]
     pub fn layout(&self) -> LayoutJob {
         self.state.layout()
     }
 }
 
-impl std::io::Write for Terminal {
+impl std::io::Write for GenericTerminal<[u8]> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         self.write_bytes(buf);
         Ok(buf.len())
@@ -55,7 +129,7 @@ impl std::io::Write for Terminal {
     }
 }
 
-impl std::fmt::Write for Terminal {
+impl std::fmt::Write for GenericTerminal<[u8]> {
     fn write_str(&mut self, s: &str) -> std::fmt::Result {
         self.write_bytes(s.as_bytes());
         Ok(())
