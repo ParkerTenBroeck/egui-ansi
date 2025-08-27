@@ -4,3 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+ansi = { git = "https://github.com/ParkerTenBroeck/ansi.git" }
+egui = "0.32"
+
+[dev-dependencies]
+eframe = "0.32"
