@@ -166,7 +166,7 @@ dependencies = [
 [[package]]
 name = "ansi"
 version = "0.1.0"
-source = "git+https://github.com/ParkerTenBroeck/ansi.git#309d9b22d086a43103acd78506653b4f18dea357"
+source = "git+https://github.com/ParkerTenBroeck/ansi.git#906f384ec858c5f01a5ef5aa02ec9b07cf36be6b"
 
 [[package]]
 name = "arboard"

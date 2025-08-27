@@ -129,7 +129,7 @@ impl State {
     }
 
     fn color_convert(color: ansi::Color, background: bool, cfg: &Config) -> Color32 {
-        match color {
+        match color.flatten_vga() {
             ansi::Color::Default => {
                 if background {
                     cfg.black
@@ -153,7 +153,6 @@ impl State {
             ansi::Color::BrightMagenta => cfg.bright_magenta,
             ansi::Color::BrightCyan => cfg.bright_cyan,
             ansi::Color::BrightWhite => cfg.bright_white,
-            ansi::Color::VGA(vga) => Self::color_convert(vga.as_color(), background, cfg),
             ansi::Color::RGB(rgb) => egui::Color32::from_rgb(rgb.r, rgb.g, rgb.b),
             _ => egui::Color32::PLACEHOLDER,
         }
@@ -168,7 +167,7 @@ impl State {
         }
 
         match self.weight {
-            Weight::Faint => match if self.invert_fg_bg { self.bg } else { self.fg } {
+            Weight::Faint => match if self.invert_fg_bg { self.bg.flatten_vga() } else { self.fg.flatten_vga() } {
                 Color::BrightBlack => color = cfg.black,
                 Color::BrightRed => color = cfg.red,
                 Color::BrightGreen => color = cfg.green,
@@ -180,7 +179,7 @@ impl State {
                 _ => color = color.gamma_multiply(0.5),
             },
             Weight::Normal => {}
-            Weight::Bold => match if self.invert_fg_bg { self.bg } else { self.fg } {
+            Weight::Bold => match if self.invert_fg_bg { self.bg.flatten_vga() } else { self.fg.flatten_vga() } {
                 Color::Black => color = cfg.bright_black,
                 Color::Red => color = cfg.bright_red,
                 Color::Green => color = cfg.bright_green,
