@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 ansi = { git = "https://github.com/ParkerTenBroeck/ansi.git" }
-egui = "0.32"
+egui = "*"
 
 [dev-dependencies]
-eframe = "0.32"
+eframe = "*"
