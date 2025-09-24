@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 
 pub mod config;
-mod state;
+pub mod kind;
 pub mod term;
 
 pub use config::*;

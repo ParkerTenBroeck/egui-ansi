@@ -1,4 +1,4 @@
-use egui::{Color32, text::LayoutJob};
+use egui::Color32;
 
 #[derive(Debug)]
 pub struct Config {
@@ -6,8 +6,8 @@ pub struct Config {
     pub subscript_font_size: f32,
     pub superscript_font_size: f32,
 
-    pub max_lines: usize,
-    pub max_col: usize,
+    pub max_rows: usize,
+    pub max_columns: usize,
 
     pub expand_bg: f32,
 
@@ -49,8 +49,8 @@ impl Config {
         subscript_font_size: 10.0,
         superscript_font_size: 10.0,
 
-        max_lines: 1000,
-        max_col: usize::MAX,
+        max_rows: 1000,
+        max_columns: usize::MAX,
         expand_bg: 0.0,
 
         strike_through_width: 1.0,
@@ -77,11 +77,7 @@ impl Config {
         bright_magenta: color(0x881798),
         bright_cyan: color(0x3a96dd),
         bright_white: Color32::from_gray(0xf2),
-        slow_blink_time_seconds: 0.5,
-        fast_blink_time_seconds: 0.25,
+        slow_blink_time_seconds: 1.0,
+        fast_blink_time_seconds: 0.5,
     };
-
-    pub fn default_layout(&self) -> LayoutJob {
-        LayoutJob::default()
-    }
 }

@@ -7,37 +7,37 @@ use std::{
 use ansi::AnsiParser;
 use egui::text::LayoutJob;
 
-use crate::{Config, state::State};
+use crate::{Config, kind::TerminalKind};
 
 #[derive(Debug)]
-pub struct GenericTerminal<T: ?Sized> {
-    state: State,
+pub struct GenericTerminal<K: TerminalKind, T: ?Sized> {
+    state: K,
     pub cfg: Config,
     pub ansi: ansi::AnsiParser<T>,
 }
 
-pub type Terminal = GenericTerminal<[u8]>;
-pub type StaticTerminal<const B: usize> = GenericTerminal<[u8; B]>;
+pub type Terminal<K> = GenericTerminal<K, [u8]>;
+pub type StaticTerminal<K, const B: usize> = GenericTerminal<K, [u8; B]>;
 
-impl<const C: usize> Deref for GenericTerminal<[u8; C]> {
-    type Target = GenericTerminal<[u8]>;
+impl<K: TerminalKind, const C: usize> Deref for GenericTerminal<K, [u8; C]> {
+    type Target = GenericTerminal<K, [u8]>;
 
     fn deref(&self) -> &Self::Target {
         self
     }
 }
 
-impl<const C: usize> DerefMut for GenericTerminal<[u8; C]> {
+impl<K: TerminalKind, const C: usize> DerefMut for GenericTerminal<K, [u8; C]> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self
     }
 }
 
-impl GenericTerminal<[u8]> {
+impl<K: TerminalKind> GenericTerminal<K, [u8]> {
     #[must_use]
     pub fn new_box<const C: usize>(cfg: Config) -> Box<Self> {
         Box::new(GenericTerminal {
-            state: State::new(&cfg),
+            state: K::new(&cfg),
             cfg,
             ansi: AnsiParser::<[u8; C]>::new(),
         })
@@ -46,7 +46,7 @@ impl GenericTerminal<[u8]> {
     #[must_use]
     pub fn new_rc<const C: usize>(cfg: Config) -> Rc<Self> {
         Rc::new(GenericTerminal {
-            state: State::new(&cfg),
+            state: K::new(&cfg),
             cfg,
             ansi: AnsiParser::<[u8; C]>::new(),
         })
@@ -55,16 +55,16 @@ impl GenericTerminal<[u8]> {
     #[must_use]
     pub fn new_arc<const C: usize>(cfg: Config) -> Arc<Self> {
         Arc::new(GenericTerminal {
-            state: State::new(&cfg),
+            state: K::new(&cfg),
             cfg,
             ansi: AnsiParser::<[u8; C]>::new(),
         })
     }
 
     #[must_use]
-    pub fn new_static<const C: usize>(cfg: Config) -> StaticTerminal<C> {
+    pub fn new_static<const C: usize>(cfg: Config) -> StaticTerminal<K, C> {
         GenericTerminal {
-            state: State::new(&cfg),
+            state: K::new(&cfg),
             cfg,
             ansi: AnsiParser::<[u8; C]>::new(),
         }
@@ -109,7 +109,7 @@ impl GenericTerminal<[u8]> {
     }
 
     pub fn clear(&mut self) {
-        self.state.clear(&self.cfg);
+        self.state.clear();
     }
 
     #[must_use]
@@ -118,7 +118,7 @@ impl GenericTerminal<[u8]> {
     }
 }
 
-impl std::io::Write for GenericTerminal<[u8]> {
+impl<K: TerminalKind> std::io::Write for GenericTerminal<K, [u8]> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         self.write_bytes(buf);
         Ok(buf.len())
@@ -129,7 +129,7 @@ impl std::io::Write for GenericTerminal<[u8]> {
     }
 }
 
-impl std::fmt::Write for GenericTerminal<[u8]> {
+impl<K: TerminalKind> std::fmt::Write for GenericTerminal<K, [u8]> {
     fn write_str(&mut self, s: &str) -> std::fmt::Result {
         self.write_bytes(s.as_bytes());
         Ok(())

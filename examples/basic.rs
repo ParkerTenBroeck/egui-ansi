@@ -1,8 +1,8 @@
 use eframe::egui;
-use egui_ansi::Terminal;
+use egui_ansi::{Terminal, kind::basic::Basic};
 
 struct MyApp {
-    term: Box<Terminal>,
+    term: Box<Terminal<Basic>>,
 }
 
 impl Default for MyApp {
@@ -16,7 +16,7 @@ impl Default for MyApp {
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("egui Counter Example");
+            ui.heading("basic");
 
             ui.horizontal(|ui| {
                 if ui.button("print").clicked() {
@@ -32,7 +32,7 @@ fn main() {
     _ = print_table(&mut std::io::stdout().lock());
     let options = eframe::NativeOptions::default();
     eframe::run_native(
-        "demo",
+        "basic",
         options,
         Box::new(|_cc| Ok(Box::new(MyApp::default()))),
     )
