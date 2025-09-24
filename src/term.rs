@@ -76,7 +76,7 @@ impl GenericTerminal<[u8]> {
         }
     }
 
-    pub fn show_bordered(&self, ui: &mut egui::Ui) {
+    pub fn show_bordered(&mut self, ui: &mut egui::Ui) {
         egui::Frame::new()
             .inner_margin(2)
             .corner_radius(ui.style().visuals.widgets.noninteractive.corner_radius)
@@ -87,13 +87,13 @@ impl GenericTerminal<[u8]> {
                     .stick_to_bottom(true)
                     .stick_to_right(true)
                     .show(ui, |ui| {
-                        ui.label(self.layout());
+                        ui.label(self.layout(ui.ctx()));
                         ui.allocate_space(ui.available_size());
                     });
             });
     }
 
-    pub fn show_framed(&self, ui: &mut egui::Ui) {
+    pub fn show_framed(&mut self, ui: &mut egui::Ui) {
         egui::Frame::new()
             .inner_margin(2)
             .fill(self.cfg.bg_default)
@@ -102,7 +102,7 @@ impl GenericTerminal<[u8]> {
                     .stick_to_bottom(true)
                     .stick_to_right(true)
                     .show(ui, |ui| {
-                        ui.label(self.layout());
+                        ui.label(self.layout(ui.ctx()));
                         ui.allocate_space(ui.available_size());
                     });
             });
@@ -113,8 +113,8 @@ impl GenericTerminal<[u8]> {
     }
 
     #[must_use]
-    pub fn layout(&self) -> LayoutJob {
-        self.state.layout()
+    pub fn layout(&mut self, ctx: &egui::Context) -> LayoutJob {
+        self.state.layout(&self.cfg, ctx)
     }
 }
 

@@ -9,9 +9,7 @@ impl Default for MyApp {
     fn default() -> Self {
         let mut term = Terminal::new_box::<256>(egui_ansi::Config::DARK);
         _ = print_table(&mut &mut *term);
-        Self {
-            term,
-        }
+        Self { term }
     }
 }
 
@@ -31,20 +29,24 @@ impl eframe::App for MyApp {
 }
 
 fn main() {
+    _ = print_table(&mut std::io::stdout().lock());
     let options = eframe::NativeOptions::default();
     eframe::run_native(
-        "egui Counter App",
+        "demo",
         options,
         Box::new(|_cc| Ok(Box::new(MyApp::default()))),
     )
     .unwrap();
 }
 
-use std::fmt::Write;
+use std::io::Write;
 const ESC: &str = "\x1b[";
 
-fn print_table(f: &mut impl Write) -> std::fmt::Result {
+fn print_table(f: &mut impl Write) -> std::io::Result<()> {
     // Table header
+    writeln!(f, "ABBA")?;
+    writeln!(f, "A🔍A")?;
+    writeln!(f, "ABBA")?;
     writeln!(f, "\nANSI SGR (CSI m) – Common Text/Color Codes\n")?;
     print_rule(f)?;
     writeln!(f, "{:<18} {:<28} Sample", "SGR", "Meaning")?;
@@ -112,7 +114,7 @@ fn print_table(f: &mut impl Write) -> std::fmt::Result {
 
 // ---------- helpers ----------
 
-fn row(f: &mut impl Write, code: &str, name: &str, sample: &str) -> std::fmt::Result {
+fn row(f: &mut impl Write, code: &str, name: &str, sample: &str) -> std::io::Result<()> {
     writeln!(
         f,
         "{:<18} {:<28} {}{}m{}{}0m",
@@ -120,7 +122,7 @@ fn row(f: &mut impl Write, code: &str, name: &str, sample: &str) -> std::fmt::Re
     )
 }
 
-fn print_rule(f: &mut impl Write) -> std::fmt::Result {
+fn print_rule(f: &mut impl Write) -> std::io::Result<()> {
     writeln!(f, "{}", "—".repeat(78))
 }
 
@@ -185,7 +187,7 @@ const RESETS: &[(&str, &str)] = &[
     ("0", "Full reset (clears all SGR)"),
 ];
 
-fn print_palette_256(f: &mut impl Write) -> std::fmt::Result {
+fn print_palette_256(f: &mut impl Write) -> std::io::Result<()> {
     // Show background color blocks and the corresponding index in plain text.
     // Group as: 0–15 (system), 16–231 (6×6×6 cube), 232–255 (grayscale)
     writeln!(f, "System (0–15):")?;
@@ -213,7 +215,7 @@ fn print_palette_range(
     start: u16,
     count: u16,
     per_row: u16,
-) -> std::fmt::Result {
+) -> std::io::Result<()> {
     let end = start + count;
     let mut i = start;
     while i < end {

@@ -7,6 +7,7 @@ pub struct Config {
     pub superscript_font_size: f32,
 
     pub max_lines: usize,
+    pub max_col: usize,
 
     pub expand_bg: f32,
 
@@ -34,6 +35,8 @@ pub struct Config {
     pub bright_magenta: Color32,
     pub bright_cyan: Color32,
     pub bright_white: Color32,
+    pub slow_blink_time_seconds: f32,
+    pub fast_blink_time_seconds: f32,
 }
 
 const fn color(raw: u32) -> Color32 {
@@ -47,6 +50,7 @@ impl Config {
         superscript_font_size: 10.0,
 
         max_lines: 1000,
+        max_col: usize::MAX,
         expand_bg: 0.0,
 
         strike_through_width: 1.0,
@@ -73,6 +77,8 @@ impl Config {
         bright_magenta: color(0x881798),
         bright_cyan: color(0x3a96dd),
         bright_white: Color32::from_gray(0xf2),
+        slow_blink_time_seconds: 0.5,
+        fast_blink_time_seconds: 0.25,
     };
 
     pub fn default_layout(&self) -> LayoutJob {

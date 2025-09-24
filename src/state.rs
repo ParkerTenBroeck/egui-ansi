@@ -48,6 +48,14 @@ pub struct State {
     invert_fg_bg: bool,
     strike_through: bool,
     conceal: bool,
+
+    column: usize,
+    line: usize,
+    text_index: usize,
+    parts_index: usize,
+
+    last_fast_blink: f64,
+    last_slow_blink: f64,
 }
 
 impl State {
@@ -69,15 +77,23 @@ impl State {
             invert_fg_bg: false,
             strike_through: false,
             conceal: false,
+
+            column: 1,
+            line: 1,
+            parts_index: 0,
+            text_index: 0,
+
+            last_fast_blink: 0.0,
+            last_slow_blink: 0.0,
         }
     }
 
     pub(crate) fn march(&mut self, out: ansi::Out<'_>, cfg: &Config) {
         match out {
-            ansi::Out::Data(c) => self.append_char(c, cfg),
-            ansi::Out::SP => self.append_char(' ', cfg),
+            ansi::Out::Data(c) => self.encounter_char(c, cfg),
+            ansi::Out::SP => self.encounter_char(' ', cfg),
             ansi::Out::CSI(csi) => self.csi(csi.parse(), cfg),
-            ansi::Out::C0(c0) => self.append_char(c0 as u8 as char, cfg),
+            ansi::Out::C0(c0) => self.encounter_char(c0 as u8 as char, cfg),
             _ => {}
         }
     }
@@ -86,12 +102,12 @@ impl State {
         match csi {
             ansi::KnownCSI::CursorRight(count) => {
                 for _ in 0..count {
-                    self.append_char(' ', cfg);
+                    self.encounter_char(' ', cfg);
                 }
             }
             ansi::KnownCSI::CursorNextLine(count) => {
                 for _ in 0..count {
-                    self.append_char('\n', cfg);
+                    self.encounter_char('\n', cfg);
                 }
             }
             ansi::KnownCSI::EraseDisplay => self.clear(cfg),
@@ -184,7 +200,7 @@ impl State {
         }
     }
 
-    fn append_char(&mut self, c: char, cfg: &Config) {
+    fn current_format(&mut self, cfg: &Config) -> TextFormat {
         let mut color = Self::color_convert(self.fg, false, cfg);
         let mut background = Self::color_convert(self.bg, true, cfg);
 
@@ -239,7 +255,7 @@ impl State {
             Script::Super => cfg.superscript_font_size,
             Script::Sub => cfg.subscript_font_size,
         };
-        let format = TextFormat {
+        TextFormat {
             font_id: if self.proportional {
                 FontId::proportional(font_size)
             } else {
@@ -258,9 +274,14 @@ impl State {
             } else {
                 Stroke::NONE
             },
-            expand_bg: cfg.expand_bg,
+            expand_bg: cfg.expand_bg
+                + match self.blinking {
+                    Blinking::None => 0.0,
+                    Blinking::Slow => -0.00001,
+                    Blinking::Fast => 0.00001,
+                },
             extra_letter_spacing: if !self.proportional {
-                (cfg.font_size - font_size)/2.0
+                (cfg.font_size - font_size) / 2.0
             } else {
                 0.0
             },
@@ -269,8 +290,15 @@ impl State {
                 Script::Super => egui::Align::Min,
                 Script::Sub => egui::Align::Max,
             },
-            line_height: None
-        };
+            line_height: None,
+        }
+    }
+
+    fn encounter_char(&mut self, c: char, cfg: &Config) {
+        let format = self.current_format(cfg);
+        // use unicode_width::UnicodeWidthChar;
+        // let width = c.width().unwrap_or_default();
+
         if let Some(last) = self.layout.sections.last_mut()
             && last.format == format
         {
@@ -311,7 +339,47 @@ impl State {
         }
     }
 
-    pub(crate) fn layout(&self) -> LayoutJob {
+    fn blink(&mut self, cfg: &Config, ctx: &egui::Context) {
+        let fast_enabled = cfg.fast_blink_time_seconds != 0.0;
+        let slow_enabled = cfg.slow_blink_time_seconds != 0.0;
+        if !fast_enabled && !slow_enabled {
+            return;
+        }
+        let time = ctx.input(|i| i.time);
+        let fast =
+            fast_enabled && time - self.last_fast_blink >= cfg.fast_blink_time_seconds as f64;
+        let slow =
+            slow_enabled && time - self.last_slow_blink >= cfg.slow_blink_time_seconds as f64;
+        if fast {
+            self.last_fast_blink = time;
+        }
+        if slow {
+            self.last_slow_blink = time;
+        }
+        if fast_enabled {
+            ctx.request_repaint_after_secs(
+                cfg.fast_blink_time_seconds - (time - self.last_fast_blink) as f32,
+            );
+        }
+        if slow_enabled {
+            ctx.request_repaint_after_secs(
+                cfg.slow_blink_time_seconds - (time - self.last_slow_blink) as f32,
+            );
+        }
+
+        if fast | slow {
+            for part in &mut self.layout.sections {
+                if part.format.expand_bg < cfg.expand_bg && slow
+                    || part.format.expand_bg > cfg.expand_bg && fast
+                {
+                    std::mem::swap(&mut part.format.background, &mut part.format.color);
+                }
+            }
+        }
+    }
+
+    pub(crate) fn layout(&mut self, cfg: &Config, ctx: &egui::Context) -> LayoutJob {
+        self.blink(cfg, ctx);
         self.layout.clone()
     }
 
