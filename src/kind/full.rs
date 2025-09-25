@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 
-use egui::{Color32, FontId, Stroke, TextFormat, text::LayoutJob};
+use egui::{Color32, FontId, TextFormat, text::LayoutJob};
 
 use crate::{
     Config,
@@ -12,13 +12,23 @@ struct Buffer {
     lines: VecDeque<Line>,
 }
 
+#[derive(Default)]
 struct Line {
     text: String,
     sections: Vec<Section>,
 }
+impl Line {
+    fn insert(&mut self, c: char, cursor: &mut CursorPosition, fmt: TextFormat) {
+        self.text.push(c);
+        self.sections.push(Section {
+            fmt,
+            size: c.len_utf8(),
+        });
+    }
+}
 
 struct Section {
-    style: TextFormat,
+    fmt: TextFormat,
     size: usize,
 }
 
@@ -26,14 +36,17 @@ struct Section {
 struct CursorPosition {
     line: usize,
     column: usize,
-    line_index: usize,
+    line_text_index: usize,
+    line_fmt_index: usize,
 }
+
 impl CursorPosition {
     fn new() -> Self {
         Self {
             line: 1,
             column: 1,
-            line_index: 0,
+            line_text_index: 0,
+            line_fmt_index: 0,
         }
     }
 }
@@ -56,12 +69,8 @@ impl Full {
                     self.style.sg(sg);
                 }
             }
-            ansi::KnownCSI::CursorRight(count) => {
-                for _ in 0..count {
-                    self.encounter_char(' ', cfg);
-                }
-            }
             ansi::KnownCSI::EraseDisplay => self.clear(),
+            ansi::KnownCSI::CursorRight(count) => {}
             ansi::KnownCSI::CursorDown(count) => {}
             ansi::KnownCSI::CursorHorizontalAbsolute(h) => {}
             ansi::KnownCSI::CursorLeft(count) => {}
@@ -110,32 +119,37 @@ impl Full {
     fn encounter_char(&mut self, c: char, cfg: &Config) {
         let format = self.style.format(cfg);
         if self.cursor.column > cfg.max_columns && c != '\n' {
-            self.insert('\n', format.clone());
+            self.insert_at_cursor('\n', format.clone());
         }
-        self.insert(c, format);
+        self.insert_at_cursor(c, format);
     }
 
-    fn insert(&mut self, c: char, _: TextFormat) {
+    fn insert_at_cursor(&mut self, c: char, fmt: TextFormat) {
         use unicode_width::UnicodeWidthChar;
         let width = c.width().unwrap_or_default();
         self.cursor.column += width;
-        self.cursor.line_index += c.len_utf8();
+        // self.cursor.line_text_index += c.len_utf8();
         if c == '\n' {
             self.cursor.line += 1;
             self.cursor.column = 1;
-            self.cursor.line_index = 0;
+            self.cursor.line_text_index = 0;
+            self.buffer.lines.push_back(Line::default());
+        } else {
+            self.buffer.lines[self.cursor.line - 1].insert(c, &mut self.cursor, fmt);
         }
     }
 }
 
 impl TerminalKind for Full {
     fn new(_: &crate::Config) -> Self {
-        Self {
+        let mut me = Self {
             buffer: Buffer::default(),
             show_cusror: true,
             cursor: CursorPosition::new(),
             style: StyleState::new(),
-        }
+        };
+        me.clear();
+        me
     }
 
     fn march(&mut self, out: ansi::Out<'_>, cfg: &Config) {
@@ -159,45 +173,67 @@ impl TerminalKind for Full {
         let slow_rem = (time % cfg.slow_blink_time_seconds as f64) as f32;
         let fast_rem = (time % cfg.fast_blink_time_seconds as f64) as f32;
 
-        let slow_swap = slow_rem > cfg.slow_blink_time_seconds / 2.0;
-        let fast_swap = fast_rem > cfg.fast_blink_time_seconds / 2.0;
+        let slow_swap = slow_enabled && slow_rem > cfg.slow_blink_time_seconds / 2.0;
+        let fast_swap = fast_enabled && fast_rem > cfg.fast_blink_time_seconds / 2.0;
 
-        if slow_enabled {
-            let half = cfg.slow_blink_time_seconds / 2.0;
-            ctx.request_repaint_after_secs(half - (time % half as f64) as f32);
-        }
-        if fast_enabled {
-            let half = cfg.fast_blink_time_seconds / 2.0;
-            ctx.request_repaint_after_secs(half - (time % half as f64) as f32);
-        }
+        let mut slow = false;
+        let mut fast = false;
 
         for (line, contents) in self.buffer.lines.iter().enumerate() {
             let line = line + 1;
             let mut offset = 0;
             for section in &contents.sections {
                 let end = offset + section.size;
-                let mut style = section.style.clone();
-                if style.line_height == Some(0.0) && slow_swap
-                    || style.line_height == Some(1.0) && fast_swap
-                {
-                    std::mem::swap(&mut style.background, &mut style.color);
+                let mut format = section.fmt.clone();
+                if format.line_height == Some(0.0) && slow_swap {
+                    slow = true;
+                    if slow_swap {
+                        std::mem::swap(&mut format.background, &mut format.color);
+                    }
+                } else if format.line_height == Some(1.0) {
+                    fast = true;
+                    if fast_swap {
+                        std::mem::swap(&mut format.background, &mut format.color);
+                    }
                 }
 
-                style.line_height = None;
-                layout.append(&contents.text[offset..end], 0.0, style);
+                format.line_height = None;
+                let spacing = if self.style.proportional {
+                    0.0
+                } else {
+                    format.extra_letter_spacing
+                };
+                layout.append(&contents.text[offset..end], spacing, format);
                 offset = end;
             }
-            if line == self.cursor.line && offset == self.cursor.line_index{
-                layout.append(" ", 0.0, TextFormat{
-                    font_id: FontId::monospace(cfg.font_size),
-                    color: Color32::TRANSPARENT,
-                    background: cfg.fg_default,
-                    ..Default::default()
-                });
+            if line == self.cursor.line && self.cursor.line_text_index == offset{
+                layout.append(
+                    " ",
+                    0.0,
+                    TextFormat {
+                        font_id: FontId::monospace(cfg.font_size),
+                        color: Color32::TRANSPARENT,
+                        background: cfg.fg_default,
+                        ..Default::default()
+                    },
+                );
             }
-            if line != self.buffer.lines.len(){
-                layout.append("\n", 0.0, TextFormat::simple(FontId::monospace(cfg.font_size), Color32::TRANSPARENT));
+            if line != self.buffer.lines.len() {
+                layout.append(
+                    "\n",
+                    0.0,
+                    TextFormat::simple(FontId::monospace(cfg.font_size), Color32::TRANSPARENT),
+                );
             }
+        }
+
+        if slow {
+            let half = cfg.slow_blink_time_seconds / 2.0;
+            ctx.request_repaint_after_secs(half - (time % half as f64) as f32);
+        }
+        if fast {
+            let half = cfg.fast_blink_time_seconds / 2.0;
+            ctx.request_repaint_after_secs(half - (time % half as f64) as f32);
         }
         layout
     }
@@ -205,5 +241,6 @@ impl TerminalKind for Full {
     fn clear(&mut self) {
         self.cursor = CursorPosition::new();
         self.buffer.lines.clear();
+        self.buffer.lines.push_back(Line::default());
     }
 }

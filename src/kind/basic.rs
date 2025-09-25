@@ -56,8 +56,13 @@ impl Basic {
             last.byte_range.end += c.len_utf8();
             self.layout.text.push(c);
         } else {
+            let spacing = if self.style.proportional {
+                0.0
+            } else {
+                format.extra_letter_spacing
+            };
             self.layout
-                .append(c.encode_utf8(&mut [0u8; 4]), 0.0, format);
+                .append(c.encode_utf8(&mut [0u8; 4]), spacing, format);
         }
         if c == '\n' {
             self.line += 1;
@@ -119,25 +124,33 @@ impl TerminalKind for Basic {
         let slow_rem = (time % cfg.slow_blink_time_seconds as f64) as f32;
         let fast_rem = (time % cfg.fast_blink_time_seconds as f64) as f32;
 
-        let slow_swap = slow_rem > cfg.slow_blink_time_seconds / 2.0;
-        let fast_swap = fast_rem > cfg.fast_blink_time_seconds / 2.0;
+        let slow_swap = slow_enabled && slow_rem > cfg.slow_blink_time_seconds / 2.0;
+        let fast_swap = fast_enabled && fast_rem > cfg.fast_blink_time_seconds / 2.0;
 
-        if slow_enabled {
+        let mut slow = false;
+        let mut fast = false;
+
+        for section in &mut clone.sections {
+            if section.format.line_height == Some(0.0) {
+                slow = true;
+                if slow_swap {
+                    std::mem::swap(&mut section.format.background, &mut section.format.color);
+                }
+            } else if section.format.line_height == Some(1.0) {
+                fast = true;
+                if fast_swap {
+                    std::mem::swap(&mut section.format.background, &mut section.format.color);
+                }
+            }
+            section.format.line_height = None;
+        }
+        if slow {
             let half = cfg.slow_blink_time_seconds / 2.0;
             ctx.request_repaint_after_secs(half - (time % half as f64) as f32);
         }
-        if fast_enabled {
+        if fast {
             let half = cfg.fast_blink_time_seconds / 2.0;
             ctx.request_repaint_after_secs(half - (time % half as f64) as f32);
-        }
-
-        for section in &mut clone.sections {
-            if section.format.line_height == Some(0.0) && slow_swap
-                || section.format.line_height == Some(1.0) && fast_swap
-            {
-                std::mem::swap(&mut section.format.background, &mut section.format.color);
-            }
-            section.format.line_height = None;
         }
         clone
     }

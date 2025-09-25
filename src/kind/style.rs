@@ -12,8 +12,8 @@ pub enum Underline {
 
 #[derive(Debug, Default)]
 pub enum Weight {
-    #[default]
     Faint,
+    #[default]
     Normal,
     Bold,
 }

@@ -1,7 +1,8 @@
 use eframe::egui;
-use egui_ansi::{Terminal, kind::{full::Full}};
+use egui_ansi::{Terminal, kind::full::Full};
 
 struct MyApp {
+    data: VecDeque<u8>,
     term: Box<Terminal<Full>>,
 }
 
@@ -10,14 +11,18 @@ impl Default for MyApp {
         let mut config = egui_ansi::Config::DARK;
         config.max_rows = 24;
         config.max_columns = 80;
-        let mut term = Terminal::new_box::<256>(config);
-        _ = print_table(&mut &mut *term);
-        Self { term }
+        let term = Terminal::new_box::<256>(config);
+        let mut data = VecDeque::new();
+        _ = print_table(&mut &mut data);
+        Self { term, data }
     }
 }
 
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _: &mut eframe::Frame) {
+        if let Some(byte) = self.data.pop_front() {
+            self.term.write_bytes(&[byte]);
+        }
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("full");
 
@@ -42,7 +47,7 @@ fn main() {
     .unwrap();
 }
 
-use std::io::Write;
+use std::{collections::VecDeque, io::Write};
 const ESC: &str = "\x1b[";
 
 fn print_table(f: &mut impl Write) -> std::io::Result<()> {
